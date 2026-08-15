@@ -4,6 +4,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"task025-walkv/internal/walstore"
 )
@@ -11,7 +12,8 @@ import (
 // Server wires a walstore.Store to HTTP handlers.
 type Server struct {
 	store *walstore.Store
-	stats map[string]int // per-endpoint hit counter (unsynchronized)
+	mu    sync.Mutex
+	stats map[string]int // per-endpoint hit counter
 }
 
 // NewServer creates a Server backed by store.
@@ -50,7 +52,7 @@ type statsResponse struct {
 }
 
 func (s *Server) handleSet(w http.ResponseWriter, r *http.Request) {
-	s.stats["set"]++
+	s.mu.Lock(); s.stats["set"]++; s.mu.Unlock()
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -72,7 +74,7 @@ func (s *Server) handleSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
-	s.stats["get"]++
+	s.mu.Lock(); s.stats["get"]++; s.mu.Unlock()
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		http.Error(w, "missing key", http.StatusBadRequest)
@@ -87,7 +89,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	s.stats["delete"]++
+	s.mu.Lock(); s.stats["delete"]++; s.mu.Unlock()
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -109,7 +111,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCompact(w http.ResponseWriter, r *http.Request) {
-	s.stats["compact"]++
+	s.mu.Lock(); s.stats["compact"]++; s.mu.Unlock()
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -122,7 +124,7 @@ func (s *Server) handleCompact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
-	s.stats["stats"]++
+	s.mu.Lock(); s.stats["stats"]++; s.mu.Unlock()
 	size, err := s.store.WALSize()
 	if err != nil {
 		http.Error(w, "stat failed: "+err.Error(), http.StatusInternalServerError)
